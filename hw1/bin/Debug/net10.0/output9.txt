@@ -1,0 +1,20 @@
+Stack                                    Input                                    Action
+----------------------------------------------------------------------------------------------------
+0                                        ( id + id ) * ( id - id ) + id * id $    s4
+0(4                                      id + id ) * ( id - id ) + id * id $      s5
+0(4id5                                   + id ) * ( id - id ) + id * id $         r6
+0(4F3                                    + id ) * ( id - id ) + id * id $         r4
+0(4T2                                    + id ) * ( id - id ) + id * id $         r2
+0(4E8                                    + id ) * ( id - id ) + id * id $         s6
+0(4E8+6                                  id ) * ( id - id ) + id * id $           s5
+0(4E8+6id5                               ) * ( id - id ) + id * id $              r6
+0(4E8+6F3                                ) * ( id - id ) + id * id $              r4
+0(4E8+6T9                                ) * ( id - id ) + id * id $              r1
+0(4E8                                    ) * ( id - id ) + id * id $              s11
+0(4E8)11                                 * ( id - id ) + id * id $                r5
+0F3                                      * ( id - id ) + id * id $                r4
+0T2                                      * ( id - id ) + id * id $                s7
+0T2*7                                    ( id - id ) + id * id $                  s4
+0T2*7(4                                  id - id ) + id * id $                    s5
+----------------------------------------------------------------------------------------------------
+UNKNOWN TOKEN ERROR: -

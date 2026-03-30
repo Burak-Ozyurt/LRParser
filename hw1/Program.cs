@@ -1,4 +1,12 @@
-﻿using System;
+﻿/*
+ * SAKARYA UNIVERSITY
+ * Concepts of Programming Languages 
+ * Homework 1 
+ * Muhammet Burak Özyurt - B231202062
+ * Oğulcan Utku Çal - B231202374
+ */
+
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -24,7 +32,7 @@ namespace HW1
         static List<Rule> Grammar = new List<Rule>();
         static Dictionary<int, Dictionary<string, string>> ActionTable = new Dictionary<int, Dictionary<string, string>>();
         static Dictionary<int, Dictionary<string, int>> GotoTable = new Dictionary<int, Dictionary<string, int>>();
-        static HashSet<string> ValidTokens = new HashSet<string>(); 
+        static HashSet<string> ValidTokens = new HashSet<string>();
 
         static void Main(string[] args)
         {
@@ -67,9 +75,12 @@ namespace HW1
                 int currentState = stateStack.Peek();
                 string currentToken = tokens[tokenIndex];
 
+                // ADIM 1 DÜZELTMESİ: Bilinmeyen token hatasında tabloyu koruyarak mesajı ekleme
                 if (!ValidTokens.Contains(currentToken) && currentToken != "$")
                 {
-                    File.WriteAllText(outputPath, $"Unknown token: {currentToken}");
+                    sb.AppendLine(new string('-', 100));
+                    sb.AppendLine("UNKNOWN TOKEN ERROR: " + currentToken);
+                    File.WriteAllText(outputPath, sb.ToString());
                     return;
                 }
 
@@ -87,7 +98,7 @@ namespace HW1
 
                 if (action == "accept") break;
 
-                if (action.StartsWith("s")) 
+                if (action.StartsWith("s"))
                 {
                     stateStack.Push(int.Parse(action.Substring(1)));
                     nodeStack.Push(new Node(currentToken));
@@ -115,15 +126,28 @@ namespace HW1
 
             sb.AppendLine(new string('-', 100));
             sb.AppendLine("Parse tree:");
-            if (nodeStack.Count > 0) PrintTree(nodeStack.Peek(), "", sb);
+
+            // ADIM 2 DÜZELTMESİ: PrintTree metoduna '0' seviyesi (level) gönderildi
+            if (nodeStack.Count > 0) PrintTree(nodeStack.Peek(), 0, sb);
+
             File.WriteAllText(outputPath, sb.ToString());
         }
 
-        static void PrintTree(Node node, string path, StringBuilder sb)
+        // ADIM 2 DÜZELTMESİ: Girintili (Indentation) Ağaç Yapısı
+        static void PrintTree(Node node, int level, StringBuilder sb)
         {
-            string currentPath = path + "/" + node.Name;
-            sb.AppendLine(currentPath);
-            foreach (var child in node.Children) PrintTree(child, currentPath, sb);
+            // Her seviye için 4 boşluk bırakarak hiyerarşiyi belli et
+            string indent = new string(' ', level * 4);
+
+            // Ağacın dallarını görselleştirmek için ok işareti eklendi
+            string prefix = level > 0 ? "-> " : "";
+
+            sb.AppendLine($"{indent}{prefix}{node.Name}");
+
+            foreach (var child in node.Children)
+            {
+                PrintTree(child, level + 1, sb);
+            }
         }
 
         static string GetStackString(Stack<int> states, Stack<Node> nodes)
@@ -144,7 +168,7 @@ namespace HW1
             foreach (var line in File.ReadAllLines(path).Where(l => !string.IsNullOrWhiteSpace(l)))
             {
                 var parts = line.Split(new[] { "->" }, StringSplitOptions.None);
-                string lhs = parts[0].Trim().Split(' ').Last(); 
+                string lhs = parts[0].Trim().Split(' ').Last();
                 int count = parts[1].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
                 Grammar.Add(new Rule { LHS = lhs, RHSCount = count });
             }
