@@ -1,206 +1,213 @@
-﻿/*
- * SAKARYA UNIVERSITY
- * Concepts of Programming Languages 
- * Homework 1 
- * Muhammet Burak Özyurt - B231202062
- * Oğulcan Utku Çal - B231202374
- */
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
 
-namespace HW1
+Console.WriteLine("LR Parser Başlatılıyor...\n");
+
+var actionTable = new Dictionary<int, Dictionary<string, string>>();
+var gotoTable = new Dictionary<int, Dictionary<string, int>>();
+var grammarRules = new Dictionary<int, GrammarRule>();
+var validTerminals = new HashSet<string>();
+
+try
 {
-    public class Rule
+    foreach (var line in File.ReadAllLines("Grammar.txt"))
     {
-        public string LHS { get; set; }
-        public int RHSCount { get; set; }
+        var parts = line.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3) continue;
+
+        int arrowIndex = Array.IndexOf(parts, "->");
+        if (arrowIndex == -1) continue;
+
+        int id = int.Parse(parts[0].Replace(".", ""));
+        grammarRules[id] = new GrammarRule
+        {
+            Id = id,
+            LeftHandSide = parts[arrowIndex - 1],
+            RightHandSideCount = parts.Length - (arrowIndex + 1)
+        };
     }
 
-    public class Node
+    var actionLines = File.ReadAllLines("ActionTable.txt");
+    var actionHeaders = actionLines[0].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    int aStart = actionHeaders[0].ToLower() == "state" ? 1 : 0;
+
+    for (int j = aStart; j < actionHeaders.Length; j++)
     {
-        public string Name { get; set; }
-        public List<Node> Children { get; set; } = new List<Node>();
-        public Node(string name) { Name = name; }
+        validTerminals.Add(actionHeaders[j]);
     }
 
-    class Program
+    for (int i = 1; i < actionLines.Length; i++)
     {
-        static List<Rule> Grammar = new List<Rule>();
-        static Dictionary<int, Dictionary<string, string>> ActionTable = new Dictionary<int, Dictionary<string, string>>();
-        static Dictionary<int, Dictionary<string, int>> GotoTable = new Dictionary<int, Dictionary<string, int>>();
-        static HashSet<string> ValidTokens = new HashSet<string>();
+        var parts = actionLines[i].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) continue;
 
-        static void Main(string[] args)
+        int state = int.Parse(parts[0]);
+        actionTable[state] = new Dictionary<string, string>();
+
+        for (int j = 1; j < parts.Length; j++)
         {
-            try
-            {
-                LoadGrammar("Grammar.txt");
-                LoadActionTable("ActionTable.txt");
-                LoadGotoTable("GotoTable.txt");
+            string action = parts[j];
+            if (action != "-" && action != "null" && action != "_" && action != "")
+                actionTable[state][actionHeaders[aStart + j - 1]] = action;
+        }
+    }
 
-                for (int i = 1; i <= 9; i++)
+    var gotoLines = File.ReadAllLines("GotoTable.txt");
+    var gotoHeaders = gotoLines[0].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+    int gStart = gotoHeaders[0].ToLower() == "state" ? 1 : 0;
+
+    for (int i = 1; i < gotoLines.Length; i++)
+    {
+        var parts = gotoLines[i].Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) continue;
+
+        int state = int.Parse(parts[0]);
+        gotoTable[state] = new Dictionary<string, int>();
+
+        for (int j = 1; j < parts.Length; j++)
+        {
+            string gotoState = parts[j];
+            if (gotoState != "-" && gotoState != "null" && gotoState != "_" && gotoState != "")
+                gotoTable[state][gotoHeaders[gStart + j - 1]] = int.Parse(gotoState);
+        }
+    }
+}
+catch (Exception ex)
+{
+    Console.WriteLine("Dosya okuma hatası: " + ex.Message);
+    return;
+}
+
+for (int i = 1; i <= 9; i++)
+{
+    string inputFile = $"input{i}.txt";
+    string outputFile = $"output{i}.txt";
+
+    if (!File.Exists(inputFile)) continue;
+
+    string inputContent = File.ReadAllText(inputFile).Trim();
+    string[] tokens = inputContent.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+    using (StreamWriter writer = new StreamWriter(outputFile))
+    {
+        writer.WriteLine($"--- LR Parsing Trace for {inputFile} ---");
+        writer.WriteLine(string.Format("{0,-30} | {1,-20} | {2}", "Stack", "Input", "Action"));
+        writer.WriteLine(new string('-', 70));
+
+        var stateStack = new List<int> { 0 };
+        var symbolStack = new List<ParseTreeNode>();
+        int ip = 0;
+        bool isAccepted = false;
+
+        while (true)
+        {
+            int currentState = stateStack.Last();
+            string currentToken = ip < tokens.Length ? tokens[ip] : "$";
+
+            string stackStr = string.Join(" ", stateStack.Select((s, index) =>
+                index == 0 ? s.ToString() : $"{symbolStack[index - 1].Value} {s}"));
+            string inputStr = string.Join(" ", tokens.Skip(ip));
+            if (ip >= tokens.Length) inputStr = "$";
+
+            if (!validTerminals.Contains(currentToken) && currentToken != "$")
+            {
+                writer.WriteLine(string.Format("{0,-30} | {1,-20} | ERROR", stackStr, inputStr));
+                writer.WriteLine($"\n[HATA] Bilinmeyen Token (Unknown Token): '{currentToken}'");
+                Console.WriteLine($"  -> {inputFile} Hatalı! (Unknown Token: {currentToken})");
+                break;
+            }
+
+            if (!actionTable.ContainsKey(currentState) || !actionTable[currentState].ContainsKey(currentToken))
+            {
+                writer.WriteLine(string.Format("{0,-30} | {1,-20} | ERROR", stackStr, inputStr));
+                writer.WriteLine("\n[HATA] Sözdizimi Hatası (Syntax Error)!");
+                Console.WriteLine($"  -> {inputFile} Hatalı! (Syntax Error)");
+                break;
+            }
+
+            string rawAction = actionTable[currentState][currentToken];
+            string action = rawAction.ToUpper();
+
+            writer.WriteLine(string.Format("{0,-30} | {1,-20} | {2}", stackStr, inputStr, rawAction));
+
+            if (action.StartsWith("S") && action != "S")
+            {
+                int nextState = int.Parse(action.Substring(1));
+                stateStack.Add(nextState);
+                symbolStack.Add(new ParseTreeNode(currentToken));
+                ip++;
+            }
+            else if (action.StartsWith("R") && action != "R")
+            {
+                int ruleId = int.Parse(action.Substring(1));
+                GrammarRule rule = grammarRules[ruleId];
+                ParseTreeNode parentNode = new ParseTreeNode(rule.LeftHandSide);
+
+                for (int j = 0; j < rule.RightHandSideCount; j++)
                 {
-                    ParseInput($"input{i}.txt", $"output{i}.txt");
-                }
-                Console.WriteLine("İşlem başarıyla tamamlandı!");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Hata: " + ex.Message);
-            }
-        }
-
-        static void ParseInput(string inputPath, string outputPath)
-        {
-            if (!File.Exists(inputPath)) return;
-
-            string[] tokens = File.ReadAllText(inputPath)
-                .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-            Stack<int> stateStack = new Stack<int>();
-            Stack<Node> nodeStack = new Stack<Node>();
-            stateStack.Push(0);
-
-            StringBuilder sb = new StringBuilder();
-            sb.AppendLine(string.Format("{0,-40} {1,-40} {2}", "Stack", "Input", "Action"));
-            sb.AppendLine(new string('-', 100));
-
-            int tokenIndex = 0;
-            while (tokenIndex < tokens.Length)
-            {
-                int currentState = stateStack.Peek();
-                string currentToken = tokens[tokenIndex];
-
-                // ADIM 1 DÜZELTMESİ: Bilinmeyen token hatasında tabloyu koruyarak mesajı ekleme
-                if (!ValidTokens.Contains(currentToken) && currentToken != "$")
-                {
-                    sb.AppendLine(new string('-', 100));
-                    sb.AppendLine("UNKNOWN TOKEN ERROR: " + currentToken);
-                    File.WriteAllText(outputPath, sb.ToString());
-                    return;
+                    parentNode.Children.Insert(0, symbolStack.Last());
+                    symbolStack.RemoveAt(symbolStack.Count - 1);
+                    stateStack.RemoveAt(stateStack.Count - 1);
                 }
 
-                if (!ActionTable.ContainsKey(currentState) || !ActionTable[currentState].ContainsKey(currentToken) || ActionTable[currentState][currentToken] == "-")
-                {
-                    sb.AppendLine(new string('-', 100));
-                    sb.AppendLine("SYNTAX ERROR at token: " + currentToken);
-                    File.WriteAllText(outputPath, sb.ToString());
-                    return;
-                }
-
-                string action = ActionTable[currentState][currentToken];
-                string inputRemaining = string.Join(" ", tokens.Skip(tokenIndex));
-                sb.AppendLine(string.Format("{0,-40} {1,-40} {2}", GetStackString(stateStack, nodeStack), inputRemaining, action));
-
-                if (action == "accept") break;
-
-                if (action.StartsWith("s"))
-                {
-                    stateStack.Push(int.Parse(action.Substring(1)));
-                    nodeStack.Push(new Node(currentToken));
-                    tokenIndex++;
-                }
-                else if (action.StartsWith("r"))
-                {
-                    int ruleIdx = int.Parse(action.Substring(1)) - 1;
-                    Rule rule = Grammar[ruleIdx];
-                    Node parent = new Node(rule.LHS);
-
-                    List<Node> children = new List<Node>();
-                    for (int i = 0; i < rule.RHSCount; i++)
-                    {
-                        if (stateStack.Count > 1) stateStack.Pop();
-                        if (nodeStack.Count > 0) children.Add(nodeStack.Pop());
-                    }
-                    children.Reverse();
-                    parent.Children.AddRange(children);
-
-                    nodeStack.Push(parent);
-                    stateStack.Push(GotoTable[stateStack.Peek()][rule.LHS]);
-                }
+                int exposedState = stateStack.Last();
+                int gotoState = gotoTable[exposedState][rule.LeftHandSide];
+                stateStack.Add(gotoState);
+                symbolStack.Add(parentNode);
             }
-
-            sb.AppendLine(new string('-', 100));
-            sb.AppendLine("Parse tree:");
-
-            // ADIM 2 DÜZELTMESİ: PrintTree metoduna '0' seviyesi (level) gönderildi
-            if (nodeStack.Count > 0) PrintTree(nodeStack.Peek(), 0, sb);
-
-            File.WriteAllText(outputPath, sb.ToString());
-        }
-
-        // ADIM 2 DÜZELTMESİ: Girintili (Indentation) Ağaç Yapısı
-        static void PrintTree(Node node, int level, StringBuilder sb)
-        {
-            // Her seviye için 4 boşluk bırakarak hiyerarşiyi belli et
-            string indent = new string(' ', level * 4);
-
-            // Ağacın dallarını görselleştirmek için ok işareti eklendi
-            string prefix = level > 0 ? "-> " : "";
-
-            sb.AppendLine($"{indent}{prefix}{node.Name}");
-
-            foreach (var child in node.Children)
+            else if (action == "ACCEPT")
             {
-                PrintTree(child, level + 1, sb);
+                writer.WriteLine("\n[BAŞARILI] İfade başarıyla ayrıştırıldı!");
+                Console.WriteLine($"  -> {inputFile} Başarıyla ayrıştırıldı.");
+                isAccepted = true;
+                break;
             }
         }
 
-        static string GetStackString(Stack<int> states, Stack<Node> nodes)
+        if (isAccepted && symbolStack.Count > 0)
         {
-            var sArr = states.ToArray(); Array.Reverse(sArr);
-            var nArr = nodes.ToArray(); Array.Reverse(nArr);
-            string res = "";
-            for (int i = 0; i < sArr.Length; i++)
-            {
-                res += sArr[i];
-                if (i < nArr.Length) res += nArr[i].Name;
-            }
-            return res;
+            writer.WriteLine("\n--- Parse Tree ---");
+            PrintTree(symbolStack[0], "", writer);
         }
+    }
+}
 
-        static void LoadGrammar(string path)
+Console.WriteLine("\nTüm işlemler tamamlandı! Çıktıları kontrol edebilirsin.");
+Console.ReadLine();
+
+
+static void PrintTree(ParseTreeNode node, string indent, StreamWriter writer)
+{
+    if (node.Children.Count > 0)
+    {
+        string childrenValues = string.Join(" ", node.Children.Select(c => c.Value));
+        writer.WriteLine($"{indent}{node.Value} -> {childrenValues}");
+
+        foreach (var child in node.Children)
         {
-            foreach (var line in File.ReadAllLines(path).Where(l => !string.IsNullOrWhiteSpace(l)))
+            if (child.Children.Count > 0)
             {
-                var parts = line.Split(new[] { "->" }, StringSplitOptions.None);
-                string lhs = parts[0].Trim().Split(' ').Last();
-                int count = parts[1].Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
-                Grammar.Add(new Rule { LHS = lhs, RHSCount = count });
+                PrintTree(child, indent + "  ", writer);
             }
         }
+    }
+}
+public class GrammarRule
+{
+    public int Id { get; set; }
+    public string LeftHandSide { get; set; }
+    public int RightHandSideCount { get; set; }
+}
+public class ParseTreeNode
+{
+    public string Value { get; set; }
+    public List<ParseTreeNode> Children { get; set; }
 
-        static void LoadActionTable(string path)
-        {
-            var lines = File.ReadAllLines(path).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-            var headers = lines[0].Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).Skip(1).ToArray();
-            foreach (var h in headers) ValidTokens.Add(h);
-
-            for (int i = 1; i < lines.Count; i++)
-            {
-                var row = lines[i].Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                int state = int.Parse(row[0]);
-                ActionTable[state] = new Dictionary<string, string>();
-                for (int j = 0; j < headers.Length; j++) ActionTable[state][headers[j]] = row[j + 1];
-            }
-        }
-
-        static void LoadGotoTable(string path)
-        {
-            var lines = File.ReadAllLines(path).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-            var headers = lines[0].Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).Skip(1).ToArray();
-            for (int i = 1; i < lines.Count; i++)
-            {
-                var row = lines[i].Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                int state = int.Parse(row[0]);
-                GotoTable[state] = new Dictionary<string, int>();
-                for (int j = 0; j < headers.Length; j++)
-                    if (row[j + 1] != "-") GotoTable[state][headers[j]] = int.Parse(row[j + 1]);
-            }
-        }
+    public ParseTreeNode(string value)
+    {
+        Value = value;
+        Children = new List<ParseTreeNode>();
     }
 }
